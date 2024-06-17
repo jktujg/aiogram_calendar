@@ -1,5 +1,5 @@
 import calendar
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.types import CallbackQuery
@@ -112,18 +112,14 @@ class SimpleCalendar(GenericCalendar):
                 ))
             kb.append(days_row)
 
-        # nav today & cancel button
-        cancel_row = []
-        cancel_row.append(InlineKeyboardButton(
-            text=self._labels.cancel_caption,
-            callback_data=SimpleCalendarCallback(act=SimpleCalAct.cancel, year=year, month=month, day=day).pack()
-        ))
-        cancel_row.append(InlineKeyboardButton(text=" ", callback_data=self.ignore_callback))
-        cancel_row.append(InlineKeyboardButton(
-            text=self._labels.today_caption,
-            callback_data=SimpleCalendarCallback(act=SimpleCalAct.today, year=year, month=month, day=day).pack()
-        ))
-        kb.append(cancel_row)
+        # bottom line navigation
+        bottom_row = []
+        for caption in ('cancel', 'yesterday', 'today', 'tomorrow'):
+            bottom_row.append(InlineKeyboardButton(
+                text=getattr(self._labels, f'{caption}_caption'),
+                callback_data=SimpleCalendarCallback(act=SimpleCalAct[caption], year=year, month=month, day=day).pack()
+            ))
+        kb.append(bottom_row)
         return InlineKeyboardMarkup(row_width=7, inline_keyboard=kb)
 
     async def _update_calendar(self, query: CallbackQuery, with_date: datetime):
@@ -148,34 +144,35 @@ class SimpleCalendar(GenericCalendar):
             return return_data
 
         temp_date = datetime(int(data.year), int(data.month), 1)
+        today = datetime.now(tz=timezone(timedelta(hours=3))).replace(hour=0, minute=0, second=0, microsecond=0)
 
         # user picked a day button, return date
         if data.act == SimpleCalAct.day:
             return await self.process_day_select(data, query)
 
         # user navigates to previous year, editing message with new calendar
-        if data.act == SimpleCalAct.prev_y:
+        elif data.act == SimpleCalAct.prev_y:
             prev_date = datetime(int(data.year) - 1, int(data.month), 1)
             await self._update_calendar(query, prev_date)
         # user navigates to next year, editing message with new calendar
-        if data.act == SimpleCalAct.next_y:
+        elif data.act == SimpleCalAct.next_y:
             next_date = datetime(int(data.year) + 1, int(data.month), 1)
             await self._update_calendar(query, next_date)
         # user navigates to previous month, editing message with new calendar
-        if data.act == SimpleCalAct.prev_m:
+        elif data.act == SimpleCalAct.prev_m:
             prev_date = temp_date - timedelta(days=1)
             await self._update_calendar(query, prev_date)
         # user navigates to next month, editing message with new calendar
-        if data.act == SimpleCalAct.next_m:
+        elif data.act == SimpleCalAct.next_m:
             next_date = temp_date + timedelta(days=31)
             await self._update_calendar(query, next_date)
-        if data.act == SimpleCalAct.today:
-            next_date = datetime.now()
-            if next_date.year != int(data.year) or next_date.month != int(data.month):
-                await self._update_calendar(query, datetime.now())
-            else:
-                await query.answer(cache_time=60)
-        if data.act == SimpleCalAct.cancel:
-            await query.message.delete_reply_markup()
+        elif data.act == SimpleCalAct.yesterday:
+            return_data = (True, today - timedelta(days=1))
+        elif data.act == SimpleCalAct.today:
+            return_data = (True, today)
+        elif data.act == SimpleCalAct.tomorrow:
+            return_data = (True, today + timedelta(days=1))
+        elif data.act == SimpleCalAct.cancel:
+            return_data = (True, None)
         # at some point user clicks DAY button, returning date
         return return_data

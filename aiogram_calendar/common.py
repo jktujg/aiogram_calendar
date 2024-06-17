@@ -66,5 +66,4 @@ class GenericCalendar:
                 show_alert=self.show_alerts
             )
             return False, None
-        await query.message.delete_reply_markup()  # removing inline keyboard
         return True, date
